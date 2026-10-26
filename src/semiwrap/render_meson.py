@@ -219,7 +219,9 @@ def _render_module_stage0(
             with r.indent():
                 for dname, dvalue in m.defines:
                     r.writeln(_make_string(f"-D{dname}={dvalue}"))
-            r.writeln("],")
+            r.writeln("] + _sw_external_args,")
+        else:
+            r.writeln("compile_args: _sw_external_args,")
 
         if m.sources:
             r.writeln("sources: [")
@@ -235,7 +237,9 @@ def _render_module_stage0(
                 if isinstance(d, LocalDependency):
                     depnames.append(vc.getvar(d))
                 else:
-                    depnames.append(f"dependency({_make_string(d)})")
+                    depnames.append(
+                        f"dependency({_make_string(d)}, include_type: 'system')"
+                    )
 
             deps = ", ".join(depnames)
             r.writeln(f"dependencies: [{deps}],")
@@ -329,6 +333,15 @@ def render_meson(
             meson.get_compiler('cpp').cmd_array()
         ]
 
+        # Dependencies use include_type: 'system' so that warnings from their
+        # headers are suppressed, but meson doesn't support that for MSVC. Treat
+        # all headers included via angle brackets as external instead.
+        if meson.get_compiler('cpp').get_id() == 'msvc'
+            _sw_external_args = ['/external:anglebrackets', '/external:W0']
+        else
+            _sw_external_args = []
+        endif
+
         #
         # internal custom targets for generating wrappers
         #
@@ -398,7 +411,9 @@ def render_meson(
                         if isinstance(dep, LocalDependency):
                             deps.append(vc.getvar(dep))
                         else:
-                            deps.append(f"dependency({_make_string(dep)})")
+                            deps.append(
+                                f"dependency({_make_string(dep)}, include_type: 'system')"
+                            )
 
                     depstrs = ", ".join(deps)
                     r0.writeln(f"dependencies: [{depstrs}],")
