@@ -140,6 +140,10 @@ class ExtensionModule:
     # extra include directories that won't be found via depends
     include_directories: T.Tuple[pathlib.Path, ...]
 
+    # include directories of external dependencies, used to suppress warnings
+    # from their headers on compilers that meson can't do that for (MSVC)
+    external_include_directories: T.Tuple[pathlib.Path, ...]
+
     defines: T.Tuple[T.Tuple[str, T.Union[str, int]], ...]
 
     # Install path is always relative to py.get_install_dir(pure: false)
@@ -148,6 +152,15 @@ class ExtensionModule:
 
 class PlanError(Exception):
     pass
+
+
+def _is_relative_to(p: pathlib.Path, other: pathlib.Path) -> bool:
+    # pathlib.Path.is_relative_to requires python 3.9
+    try:
+        p.relative_to(other)
+        return True
+    except ValueError:
+        return False
 
 
 def _split_ns(name: str) -> T.Tuple[str, str]:
@@ -308,6 +321,12 @@ class _BuildPlanner:
             self._prepare_dependency_paths(depends, extension)
         )
 
+        external_include_directories = tuple(
+            inc
+            for inc in include_directories_uniq
+            if not _is_relative_to(inc, self.project_root)
+        )
+
         includes = [
             self.project_root / pathlib.PurePosixPath(inc) for inc in extension.includes
         ]
@@ -421,6 +440,7 @@ class _BuildPlanner:
             sources=tuple(module_sources),
             depends=(local_dep,),
             include_directories=tuple(),
+            external_include_directories=external_include_directories,
             defines=tuple(extension.defines.items()),
             install_path=package_path,
         )

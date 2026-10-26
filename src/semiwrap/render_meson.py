@@ -214,14 +214,22 @@ def _render_module_stage0(
     r.writeln(f"{m.name}_deps = [declare_dependency(")
     with r.indent():
 
-        if m.defines:
+        if m.defines or m.external_include_directories:
             r.writeln("compile_args: [")
             with r.indent():
                 for dname, dvalue in m.defines:
                     r.writeln(_make_string(f"-D{dname}={dvalue}"))
-            r.writeln("] + _sw_external_args,")
-        else:
-            r.writeln("compile_args: _sw_external_args,")
+            if m.external_include_directories:
+                # meson only suppresses warnings from dependency headers via
+                # include_type: 'system' for gcc/clang, so do it for MSVC here
+                r.writeln("] + (_sw_is_msvc ? [")
+                with r.indent():
+                    r.writeln("'/external:W0',")
+                    for inc in m.external_include_directories:
+                        r.writeln(_make_string(f"/external:I{inc.as_posix()}") + ",")
+                r.writeln("] : []),")
+            else:
+                r.writeln("],")
 
         if m.sources:
             r.writeln("sources: [")
@@ -333,14 +341,7 @@ def render_meson(
             meson.get_compiler('cpp').cmd_array()
         ]
 
-        # Dependencies use include_type: 'system' so that warnings from their
-        # headers are suppressed, but meson doesn't support that for MSVC. Treat
-        # all headers included via angle brackets as external instead.
-        if meson.get_compiler('cpp').get_id() == 'msvc'
-            _sw_external_args = ['/external:anglebrackets', '/external:W0']
-        else
-            _sw_external_args = []
-        endif
+        _sw_is_msvc = meson.get_compiler('cpp').get_id() == 'msvc'
 
         #
         # internal custom targets for generating wrappers
